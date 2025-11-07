@@ -1,0 +1,57 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      # Optionally start the local MCP server if an AI key is available
+      - name: Run E2E (MCP + Playwright) if AI key present
+        if: ${{ secrets.AI_API_KEY != '' }}
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          MCP_URL: http://localhost:8081
+        run: |
+          # Start local MCP server in background
+          npm run mcp:start &
+          MCP_PID=$!
+
+          # Build and start Next.js in production mode (background)
+          npm run build
+          npm run start &
+          NEXT_PID=$!
+
+          # Wait for the app to be ready on port 3000
+          echo "Waiting for http://localhost:3000..."
+          for i in {1..60}; do
+            if curl -sS http://localhost:3000 >/dev/null 2>&1; then
+              echo "Server is up"
+              break
+            fi
+            sleep 1
+          done
+
+          # Install Playwright browsers/deps
+          npx playwright install --with-deps
+
+          # Run Playwright tests
+          npx playwright test || true
+
+          # Teardown background processes
+          echo "Stopping Next (PID $NEXT_PID) and MCP (PID $MCP_PID)"
+          kill $NEXT_PID || true
+          kill $MCP_PID || true
