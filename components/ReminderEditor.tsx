@@ -88,15 +88,29 @@ export default function ReminderEditor({ reminder, onSaved }: Props) {
         note
       }
 
-      // Try Supabase first; if it errors (e.g. RLS/auth), fall back to localStore.
+      // Use the server-side API (uses SUPABASE_SERVICE_ROLE_KEY). If the
+      // server errors, fall back to localStore so the UI remains usable.
       try {
         if (reminder?.id) {
-          await supabase.from('reminders').update(record).eq('id', reminder.id)
+          const res = await fetch(`/api/reminders?id=${encodeURIComponent(reminder.id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record)
+          })
+          if (res.ok) {
+            onSaved?.()
+          } else {
+            throw new Error('Server failed')
+          }
         } else {
-          await supabase.from('reminders').insert(record)
+          const res = await fetch('/api/reminders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record)
+          })
+          if (!res.ok) throw new Error('Server failed')
         }
       } catch (e) {
-        // fallback to local
         if (reminder?.id) {
           localStore.update(reminder.id, record as any)
         } else {

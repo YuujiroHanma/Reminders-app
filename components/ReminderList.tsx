@@ -31,18 +31,17 @@ export default function ReminderList({ onEdit }: Props) {
   async function fetchReminders() {
     setLoading(true)
     try {
-      // Try fetching from Supabase first. If auth/RLS blocks the request or
-      // any error occurs, fall back to the local in-browser store.
+      // Prefer server API which uses the service role key to access the DB.
       try {
-        const { data, error } = await supabase.from('reminders').select('*').order('due_at', { ascending: true })
-        if (!error && data) {
-          setItems((data as Reminder[]) || [])
+        const res = await fetch('/api/reminders')
+        const j = await res.json()
+        if (res.ok && j.data) {
+          setItems((j.data as Reminder[]) || [])
           return
         }
-      } catch (supErr) {
+      } catch (err) {
         // ignore and fall back
       }
-      // Fallback to localStorage-backed reminders so the UI works without auth
       const local = localStore.getAll()
       setItems((local as unknown as Reminder[]) || [])
     } catch (err) {
@@ -79,11 +78,17 @@ export default function ReminderList({ onEdit }: Props) {
   async function toggleCompleted(r: Reminder) {
     try {
       try {
-        await supabase.from('reminders').update({ completed: !r.completed }).eq('id', r.id)
-        fetchReminders()
-        return
+        const res = await fetch(`/api/reminders?id=${encodeURIComponent(r.id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ completed: !r.completed })
+        })
+        if (res.ok) {
+          fetchReminders()
+          return
+        }
       } catch (e) {
-        // fall back to local
+        // fall back
       }
       localStore.update(r.id, { completed: !r.completed })
       fetchReminders()
@@ -96,9 +101,11 @@ export default function ReminderList({ onEdit }: Props) {
     if (!confirm('Delete reminder?')) return
     try {
       try {
-        await supabase.from('reminders').delete().eq('id', id)
-        fetchReminders()
-        return
+        const res = await fetch(`/api/reminders?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+        if (res.ok) {
+          fetchReminders()
+          return
+        }
       } catch (e) {
         // fall back
       }

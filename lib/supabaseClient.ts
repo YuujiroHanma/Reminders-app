@@ -21,13 +21,15 @@ export const supabase: any = (supabaseUrl && supabaseAnonKey)
         signInWithOtp: async () => ({ error: new Error('Supabase not configured') }),
         signOut: async () => ({ error: null })
       },
-      // minimal table-interface used in components (returns no-ops)
+      // minimal table-interface used in components. When Supabase isn't
+      // configured, these methods throw so calling code falls back to the
+      // local store. This avoids silently 'succeeding' without persisting.
       from: () => ({
-        select: async () => ({ data: null, error: null }),
-        insert: async () => ({ data: null, error: null }),
-        update: async () => ({ data: null, error: null }),
-        delete: async () => ({ data: null, error: null }),
-        order: () => ({ select: async () => ({ data: null, error: null }) })
+        select: async () => { throw new Error('Supabase not configured') },
+        insert: async () => { throw new Error('Supabase not configured') },
+        update: async () => { throw new Error('Supabase not configured') },
+        delete: async () => { throw new Error('Supabase not configured') },
+        order: () => ({ select: async () => { throw new Error('Supabase not configured') } })
       }),
       // stub channel API
       channel: () => ({ on: () => ({ subscribe: () => ({}) }), unsubscribe: () => {} })
